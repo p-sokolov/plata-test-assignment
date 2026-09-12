@@ -1,0 +1,239 @@
+openapi: 3.0.3
+info:
+  title: Currency Quote Service API
+  description: Service for retrieving and updating currency quotes
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+
+paths:
+  /quotes/refresh:
+    post:
+      summary: Request for quote refresh
+      description: Accepts a currency pair, queues an update task, and returns the task identifier
+      operationId: refreshQuote
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshQuoteRequest'
+      responses:
+        '202':
+          description: The refresh task has been successfully accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshQuoteResponse'
+        '400':
+          description: Invalid request format or unsupported currency pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The Idempotency-Key was already used with a different request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /quotes/updates/{id}:
+    get:
+      summary: Get the quote update result by ID
+      description: Returns the current update status, price, and update time
+      operationId: getQuoteUpdateByID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Update task UUID
+          schema:
+            type: string
+            format: uuid
+            example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      responses:
+        '200':
+          description: Update task information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateQuoteDetailsResponse'
+        '400':
+          description: Invalid UUID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Task with the specified ID was not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /quotes/latest:
+    get:
+      summary: Get the latest current quote value
+      description: Returns the most recent saved price for the specified currency pair
+      operationId: getLatestQuote
+      parameters:
+        - name: pair
+          in: query
+          required: true
+          description: Currency pair (for example, EUR/MXN, USD/EUR)
+          schema:
+            type: string
+            example: "EUR/MXN"
+      responses:
+        '200':
+          description: Latest quote found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LatestQuoteResponse'
+        '400':
+          description: The 'pair' parameter was not passed or has an invalid format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: There are no quotes for the specified pair in the system yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A client-generated unique key. Repeating a request with the same key and identical body returns the same update_id
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 255
+      example: "1eafcf91-0ec6-4f8a-8e69-a8f2e646bf82"
+
+  schemas:
+    RefreshQuoteRequest:
+      type: object
+      required:
+        - currency_pair
+      properties:
+        currency_pair:
+          type: string
+          description: Currency pair in ISO 4217 format. Supported pairs are configured by the service
+          minLength: 7
+          maxLength: 7
+          pattern: '^[A-Z]{3}/[A-Z]{3}$'
+          example: "EUR/MXN"
+
+    RefreshQuoteResponse:
+      type: object
+      required:
+        - update_id
+      properties:
+        update_id:
+          type: string
+          format: uuid
+          description: Unique background task identifier
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+
+    UpdateQuoteDetailsResponse:
+      type: object
+      required:
+        - id
+        - currency_pair
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        currency_pair:
+          type: string
+          pattern: '^[A-Z]{3}/[A-Z]{3}$'
+          example: "EUR/MXN"
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, SUCCESS, FAILED]
+          description: Current update execution status
+          example: "SUCCESS"
+        rate:
+          type: number
+          format: double
+          nullable: true
+          description: Currency pair exchange rate (when status is SUCCESS)
+          example: 21.420000
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Exchange rate update time (UTC)
+          example: "2026-09-10T12:00:00Z"
+        error_message:
+          type: string
+          nullable: true
+          description: Error description (when status is FAILED)
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Time when the refresh task was created (UTC)
+          example: "2026-09-10T11:59:00Z"
+
+    LatestQuoteResponse:
+      type: object
+      required:
+        - currency_pair
+        - rate
+        - updated_at
+      properties:
+        currency_pair:
+          type: string
+          pattern: '^[A-Z]{3}/[A-Z]{3}$'
+          example: "EUR/MXN"
+        rate:
+          type: number
+          format: double
+          example: 21.420000
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-09-10T12:00:00Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Description of the error that occurred
+          example: "unsupported currency pair: only EUR, USD, MXN are allowed"
