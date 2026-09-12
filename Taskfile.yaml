@@ -1,0 +1,17 @@
+version: '3'
+
+vars:
+  OPENAPI_SPEC: api/openapi.yaml
+  OPENAPI_CONFIG: oapi-codegen.yaml
+  OPENAPI_OUT: internal/transport/http/v1/api.gen.go
+
+tasks:
+  generate:api:
+    desc: Generate go code from api spec
+    sources:
+      - '{{.OPENAPI_SPEC}}'
+      - '{{.OPENAPI_CONFIG}}'
+    generates:
+      - '{{.OPENAPI_OUT}}'
+    cmds:
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}}
