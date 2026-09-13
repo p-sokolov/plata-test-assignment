@@ -4,6 +4,7 @@ vars:
   OPENAPI_SPEC: api/openapi.yaml
   OPENAPI_CONFIG: oapi-codegen.yaml
   OPENAPI_OUT: internal/transport/http/v1/api.gen.go
+  SQLC_CONFIG: internal/repository/db/sqlc/sqlc.yaml
 
 tasks:
   generate:api:
@@ -14,4 +15,8 @@ tasks:
     generates:
       - '{{.OPENAPI_OUT}}'
     cmds:
-      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}}
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}} 
+  generate:sqlc:
+    desc: Generate go code and sql.go queries from sql file
+    cmds: 
+      - sqlc generate -f {{.SQLC_CONFIG}}
