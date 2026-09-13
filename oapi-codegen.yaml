@@ -2,6 +2,6 @@ package: v1
 output: internal/transport/http/v1/api.gen.go
 generate:
   models: true
-  std-http-server: true
+  echo-server: true
   strict-server: true
   embedded-spec: true
