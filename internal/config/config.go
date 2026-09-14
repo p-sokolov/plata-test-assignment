@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
 )
@@ -9,6 +10,8 @@ import (
 type Config struct {
 	HttpSrv  httpServer
 	Postgres postgres
+	FX 		 fxConfig
+	Worker	 workerConfig
 }
 
 type httpServer struct {
@@ -18,6 +21,18 @@ type httpServer struct {
 type postgres struct {
 	URL      string `env:"POSTGRES_URL" env-required:"true"`
 	MaxConns int32  `env:"POSTGRES_MAX_CONNS" env-default:"10"`
+}
+
+type fxConfig struct {
+	BaseURL string `env:"FX_BASE_URL" env-required:"true"`
+	APIKey string `env:"FX_ACCESS_KEY" env-required:"true"`
+	Timeout time.Duration `env:"FX_TIMEOUT" env-default:"10s"`
+}
+
+type workerConfig struct {
+	Interval time.Duration `env:"WORKER_POLL_INTERVAL" env-default:"1s"`
+	Duration time.Duration `env:"WORKER_LEASE_DURATION" env-default:"30s"`
+	Attempts int32 `env:"WORKER_MAX_ATTEMPTS" env-default:"3"`
 }
 
 // New creates a new config instance
