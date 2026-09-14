@@ -17,7 +17,7 @@ type httpServer struct {
 
 type postgres struct {
 	URL      string `env:"POSTGRES_URL" env-required:"true"`
-	MaxConns int32  `env:"POSTGRES_MAX_CONNS" env-default:"100"`
+	MaxConns int32  `env:"POSTGRES_MAX_CONNS" env-default:"10"`
 }
 
 // New creates a new config instance
