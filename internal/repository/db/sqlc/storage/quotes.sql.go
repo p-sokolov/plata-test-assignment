@@ -29,7 +29,7 @@ SET status = 'PROCESSING',
     attempt_count = attempt_count + 1,
     updated_at = NOW()
 WHERE id IN (SELECT id FROM candidate)
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+RETURNING quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 `
 
 func (q *Queries) ClaimNextQuoteUpdate(ctx context.Context, lockedUntil *time.Time) (QuoteUpdate, error) {
@@ -44,6 +44,7 @@ func (q *Queries) ClaimNextQuoteUpdate(ctx context.Context, lockedUntil *time.Ti
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -55,7 +56,7 @@ INSERT INTO quote_updates (currency_pair, status)
 VALUES ($1, 'PENDING')
 ON CONFLICT (currency_pair) WHERE status IN ('PENDING', 'PROCESSING')
 DO UPDATE SET currency_pair = EXCLUDED.currency_pair
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+RETURNING quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 `
 
 func (q *Queries) CreateOrGetActiveQuoteUpdate(ctx context.Context, currencyPair string) (QuoteUpdate, error) {
@@ -70,6 +71,7 @@ func (q *Queries) CreateOrGetActiveQuoteUpdate(ctx context.Context, currencyPair
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -77,7 +79,7 @@ func (q *Queries) CreateOrGetActiveQuoteUpdate(ctx context.Context, currencyPair
 }
 
 const getByID = `-- name: GetByID :one
-SELECT id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+SELECT quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 FROM quote_updates
 WHERE id = $1
 `
@@ -94,14 +96,36 @@ func (q *Queries) GetByID(ctx context.Context, id uuid.UUID) (QuoteUpdate, error
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const getIdempotencyKey = `-- name: GetIdempotencyKey :one
+SELECT idempotency_keys.key, idempotency_keys.request_hash, idempotency_keys.update_id, idempotency_keys.response_code, idempotency_keys.expires_at, idempotency_keys.created_at
+FROM idempotency_keys
+WHERE key = $1
+  AND expires_at > NOW()
+`
+
+func (q *Queries) GetIdempotencyKey(ctx context.Context, key string) (IdempotencyKey, error) {
+	row := q.db.QueryRow(ctx, getIdempotencyKey, key)
+	var i IdempotencyKey
+	err := row.Scan(
+		&i.Key,
+		&i.RequestHash,
+		&i.UpdateID,
+		&i.ResponseCode,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getLatestByPair = `-- name: GetLatestByPair :one
-SELECT id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+SELECT quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 FROM quote_updates
 WHERE currency_pair = $1
   AND status = 'SUCCESS'
@@ -121,10 +145,20 @@ func (q *Queries) GetLatestByPair(ctx context.Context, currencyPair string) (Quo
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockIdempotencyKey = `-- name: LockIdempotencyKey :exec
+SELECT pg_advisory_xact_lock(hashtext($1))
+`
+
+func (q *Queries) LockIdempotencyKey(ctx context.Context, hashtext string) error {
+	_, err := q.db.Exec(ctx, lockIdempotencyKey, hashtext)
+	return err
 }
 
 const markQuoteUpdateFailed = `-- name: MarkQuoteUpdateFailed :one
@@ -137,7 +171,7 @@ SET status = 'FAILED',
 WHERE id = $2
   AND status = 'PROCESSING'
   AND locked_until > NOW()
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+RETURNING quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 `
 
 type MarkQuoteUpdateFailedParams struct {
@@ -157,6 +191,7 @@ func (q *Queries) MarkQuoteUpdateFailed(ctx context.Context, arg MarkQuoteUpdate
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -173,7 +208,7 @@ SET status = 'SUCCESS',
 WHERE id = $2
   AND status = 'PROCESSING'
   AND locked_until > NOW()
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+RETURNING quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 `
 
 type MarkQuoteUpdateSucceededParams struct {
@@ -193,6 +228,7 @@ func (q *Queries) MarkQuoteUpdateSucceeded(ctx context.Context, arg MarkQuoteUpd
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -227,7 +263,7 @@ SET status = 'PENDING',
 WHERE id = $3
   AND status = 'PROCESSING'
   AND locked_until > NOW()
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+RETURNING quote_updates.id, quote_updates.currency_pair, quote_updates.status, quote_updates.rate, quote_updates.error_message, quote_updates.attempt_count, quote_updates.next_attempt_at, quote_updates.locked_until, quote_updates.lease_token, quote_updates.created_at, quote_updates.updated_at
 `
 
 type ScheduleQuoteUpdateRetryParams struct {
@@ -248,8 +284,49 @@ func (q *Queries) ScheduleQuoteUpdateRetry(ctx context.Context, arg ScheduleQuot
 		&i.AttemptCount,
 		&i.NextAttemptAt,
 		&i.LockedUntil,
+		&i.LeaseToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertIdempotencyKey = `-- name: UpsertIdempotencyKey :one
+INSERT INTO idempotency_keys (key, request_hash, update_id, response_code, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (key) DO UPDATE
+SET request_hash = EXCLUDED.request_hash,
+    update_id = EXCLUDED.update_id,
+    response_code = EXCLUDED.response_code,
+    expires_at = EXCLUDED.expires_at,
+    created_at = NOW()
+RETURNING idempotency_keys.key, idempotency_keys.request_hash, idempotency_keys.update_id, idempotency_keys.response_code, idempotency_keys.expires_at, idempotency_keys.created_at
+`
+
+type UpsertIdempotencyKeyParams struct {
+	Key          string
+	RequestHash  string
+	UpdateID     uuid.UUID
+	ResponseCode int16
+	ExpiresAt    time.Time
+}
+
+func (q *Queries) UpsertIdempotencyKey(ctx context.Context, arg UpsertIdempotencyKeyParams) (IdempotencyKey, error) {
+	row := q.db.QueryRow(ctx, upsertIdempotencyKey,
+		arg.Key,
+		arg.RequestHash,
+		arg.UpdateID,
+		arg.ResponseCode,
+		arg.ExpiresAt,
+	)
+	var i IdempotencyKey
+	err := row.Scan(
+		&i.Key,
+		&i.RequestHash,
+		&i.UpdateID,
+		&i.ResponseCode,
+		&i.ExpiresAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
