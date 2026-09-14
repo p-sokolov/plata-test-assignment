@@ -1,0 +1,18 @@
+.git
+.gitignore
+
+# Task checksum
+.task
+
+# Local build output
+tmp
+
+# Editor files
+.idea
+.vscode
+
+# env file
+.env
+.env.example
+config.env
+config.env.example
