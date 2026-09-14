@@ -10,7 +10,7 @@ import (
 	"plata-test-assignment/internal/errorz"
 	"plata-test-assignment/internal/models"
 	"plata-test-assignment/internal/repository"
-	"plata-test-assignment/internal/repository/db/sqlc/storage"
+	"plata-test-assignment/internal/repository/postgres/sqlc/storage"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

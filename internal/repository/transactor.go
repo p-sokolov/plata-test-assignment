@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"plata-test-assignment/internal/repository/db/sqlc/storage"
+	"plata-test-assignment/internal/repository/postgres/sqlc/storage"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

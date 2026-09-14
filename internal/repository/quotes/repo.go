@@ -2,7 +2,7 @@ package quotes
 
 import (
 	"plata-test-assignment/internal/models"
-	"plata-test-assignment/internal/repository/db/sqlc/storage"
+	"plata-test-assignment/internal/repository/postgres/sqlc/storage"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
