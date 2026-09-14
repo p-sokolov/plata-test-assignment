@@ -3,10 +3,10 @@ INSERT INTO quote_updates (currency_pair, status)
 VALUES ($1, 'PENDING')
 ON CONFLICT (currency_pair) WHERE status IN ('PENDING', 'PROCESSING')
 DO UPDATE SET currency_pair = EXCLUDED.currency_pair
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at;
+RETURNING quote_updates.*;
 
 -- name: GetLatestByPair :one
-SELECT id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+SELECT quote_updates.*
 FROM quote_updates
 WHERE currency_pair = $1
   AND status = 'SUCCESS'
@@ -14,7 +14,7 @@ ORDER BY updated_at DESC
 LIMIT 1;
 
 -- name: GetByID :one
-SELECT id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at
+SELECT quote_updates.*
 FROM quote_updates
 WHERE id = $1;
 
@@ -34,7 +34,7 @@ SET status = 'PROCESSING',
     attempt_count = attempt_count + 1,
     updated_at = NOW()
 WHERE id IN (SELECT id FROM candidate)
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at;
+RETURNING quote_updates.*;
 
 -- name: RequeueExpiredQuoteUpdates :execrows
 UPDATE quote_updates
@@ -55,7 +55,7 @@ SET status = 'SUCCESS',
 WHERE id = $2
   AND status = 'PROCESSING'
   AND locked_until > NOW()
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at;
+RETURNING quote_updates.*;
 
 -- name: ScheduleQuoteUpdateRetry :one
 UPDATE quote_updates
@@ -67,7 +67,7 @@ SET status = 'PENDING',
 WHERE id = $3
   AND status = 'PROCESSING'
   AND locked_until > NOW()
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at;
+RETURNING quote_updates.*;
 
 -- name: MarkQuoteUpdateFailed :one
 UPDATE quote_updates
@@ -79,4 +79,24 @@ SET status = 'FAILED',
 WHERE id = $2
   AND status = 'PROCESSING'
   AND locked_until > NOW()
-RETURNING id, currency_pair, status, rate, error_message, attempt_count, next_attempt_at, locked_until, created_at, updated_at;
+RETURNING quote_updates.*;
+
+-- name: LockIdempotencyKey :exec
+SELECT pg_advisory_xact_lock(hashtext($1));
+
+-- name: GetIdempotencyKey :one
+SELECT idempotency_keys.*
+FROM idempotency_keys
+WHERE key = $1
+  AND expires_at > NOW();
+
+-- name: UpsertIdempotencyKey :one
+INSERT INTO idempotency_keys (key, request_hash, update_id, response_code, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (key) DO UPDATE
+SET request_hash = EXCLUDED.request_hash,
+    update_id = EXCLUDED.update_id,
+    response_code = EXCLUDED.response_code,
+    expires_at = EXCLUDED.expires_at,
+    created_at = NOW()
+RETURNING idempotency_keys.*;

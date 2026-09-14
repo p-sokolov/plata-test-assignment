@@ -22,7 +22,7 @@ type IdempotencyKey struct {
 
 type OutboxEvent struct {
 	ID            int64
-	AggregateID   uuid.UUID
+	QuoteID       uuid.UUID
 	EventType     string
 	Payload       []byte
 	CreatedAt     time.Time
@@ -40,6 +40,7 @@ type QuoteUpdate struct {
 	AttemptCount  int32
 	NextAttemptAt time.Time
 	LockedUntil   *time.Time
+	LeaseToken    *uuid.UUID
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
