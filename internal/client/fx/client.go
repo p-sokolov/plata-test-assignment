@@ -36,6 +36,6 @@ type FXResponse struct {
 		Timestamp int64   `json:"timestamp"`
 		Quote     float64 `json:"quote"`
 	} `json:"info"`
-	Date   string  `json: "date"`
+	Date   string  `json:"date"`
 	Result float64 `json:"result"`
 }

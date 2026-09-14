@@ -12,7 +12,7 @@ import (
 )
 
 func (c *Client) GetRate(ctx context.Context, pair string) (float64, error) {
-	result, err := ConvertCurrency(ctx, c, pair, 1)
+	result, err := convertCurrency(ctx, c, pair, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -20,7 +20,7 @@ func (c *Client) GetRate(ctx context.Context, pair string) (float64, error) {
 	return result.Result, err
 }
 
-func ConvertCurrency(
+func convertCurrency(
 	ctx context.Context,
 	c *Client,
 	pair string, 
