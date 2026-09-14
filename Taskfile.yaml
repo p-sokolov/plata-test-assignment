@@ -5,18 +5,62 @@ vars:
   OPENAPI_CONFIG: oapi-codegen.yaml
   OPENAPI_OUT: internal/transport/http/v1/api.gen.go
   SQLC_CONFIG: internal/repository/db/sqlc/sqlc.yaml
+  DOCKER_ENV: .env
+  COMPOSE_FILE: env/compose.yaml
+  DEV_COMPOSE_FILE: env/compose-dev.yaml
 
 tasks:
-  generate:api:
-    desc: Generate go code from api spec
+  gen:api:
+    desc: Generate Go types and Echo server interfaces from OpenAPI
     sources:
       - '{{.OPENAPI_SPEC}}'
       - '{{.OPENAPI_CONFIG}}'
     generates:
       - '{{.OPENAPI_OUT}}'
     cmds:
-      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}} 
-  generate:sqlc:
-    desc: Generate go code and sql.go queries from sql file
-    cmds: 
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}}
+
+  gen:sqlc:
+    desc: Generate type-safe Go code from SQL queries
+    cmds:
       - sqlc generate -f {{.SQLC_CONFIG}}
+
+  test:
+    desc: Run all Go tests
+    cmds:
+      - go test ./...
+
+  build:
+    desc: Build the production image
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} build
+
+  up:
+    desc: Start the production-like stack in the background
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} up --build -d
+
+  down:
+    desc: Stop the production-like stack
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} down
+
+  logs:
+    desc: Follow logs of the production-like stack
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} logs -f
+
+  dev:up:
+    desc: Start development containers with Air live reload
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.DEV_COMPOSE_FILE}} up --build
+
+  dev:down:
+    desc: Stop development containers
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.DEV_COMPOSE_FILE}} down
+
+  dev:logs:
+    desc: Follow logs of the development stack
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.DEV_COMPOSE_FILE}} logs -f
