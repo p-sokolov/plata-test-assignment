@@ -1,13 +1,8 @@
 package fx
 
 import (
-	"context"
 	"net/http"
 )
-
-type rateProvider interface {
-    GetRate(ctx context.Context, pair string) (float64, error)
-}
 
 type Client struct {
     baseURL   string
