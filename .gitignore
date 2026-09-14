@@ -24,6 +24,9 @@ go.work.sum
 # Task checksum
 .task
 
+# Air live-reload output
+tmp/
+
 # env file
 .env
 config.env
