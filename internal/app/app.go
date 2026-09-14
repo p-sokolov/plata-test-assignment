@@ -15,9 +15,8 @@ import (
 	v1 "plata-test-assignment/internal/transport/http/v1"
 	swaggerui "plata-test-assignment/pkg/swagger-ui"
 
-	"plata-test-assignment/internal/config"
 	"plata-test-assignment/env"
-	"plata-test-assignment/internal/repository/db"
+	"plata-test-assignment/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -115,6 +114,10 @@ func initDB(ctx context.Context, dbURL string, maxConns int32) (*pgxpool.Pool, e
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
+		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, err
 	}
 
