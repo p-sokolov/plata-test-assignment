@@ -28,7 +28,7 @@ tasks:
   test:
     desc: Run all Go tests
     cmds:
-      - go test ./...
+      - go test -v ./tests
 
   build:
     desc: Build the production image
