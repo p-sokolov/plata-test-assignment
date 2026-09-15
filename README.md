@@ -42,17 +42,15 @@ set is accepted. A request for an unsupported pair returns `400`.
 
 ## How to run
 
-### Prerequisites
-
-Create a local environment file and set a real FX key:
+1. Create a local environment file:
 
 ```shell
 cp .env.example .env
 ```
 
-Set `FX_ACCESS_KEY` in `.env`.
+2. Set `FX_ACCESS_KEY` in `.env` (or take an existing api key which I used: `7e6c012328a0b46bef65b9636b81d70e`). 
 
-Start the application, PostgreSQL, and Redis:
+3. Start the application, PostgreSQL, and Redis:
 
 ```shell
 task up
@@ -82,8 +80,7 @@ and others.
 
 ## Postman demo
 
-Import [Quote-Service.postman_collection.json](postman/Quote-Service.postman_collection.json)
-into Postman or try (https://www.postman.com/89214372442az-113996/plata-home-assignment/collection/80ku252/quote-service?action=share&source=copy-link&creator=55962463)[my shared link].
+Import [Quote-Service.postman_collection.json](postman/Quote-Service.postman_collection.json) into Postman or try [my shared link](https://www.postman.com/89214372442az-113996/plata-home-assignment/collection/80ku252/quote-service?action=share&source=copy-link&creator=55962463).
 
 ## Architecture
 
