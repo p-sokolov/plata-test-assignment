@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// create app instance
-	a, err := app.New(context.Background(), cfg, logger)
+	a, err := app.New(ctx, cfg, logger)
 	if err != nil {
 		logger.Error("failed to create app", slog.Any("error", err))
 		os.Exit(1)
@@ -39,7 +39,7 @@ func main() {
 	// start app with error channel
 	errChan := make(chan error, 1)
 	go func() {
-		if err := a.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := a.Start(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errChan <- err
 		}
 		close(errChan)
