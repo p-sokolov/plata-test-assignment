@@ -10,9 +10,9 @@ import (
 )
 
 func (h *Handler) GetQuoteUpdateByID(
-	ctx context.Context, 
+	ctx context.Context,
 	request v1.GetQuoteUpdateByIDRequestObject,
-) (v1.GetQuoteUpdateByIDResponseObject, error) {	
+) (v1.GetQuoteUpdateByIDResponseObject, error) {
 	quote, err := h.svc.GetByID(ctx, request.Id)
 	if err != nil {
 		if errors.Is(err, errorz.ErrQuoteNotFound) {
@@ -25,9 +25,9 @@ func (h *Handler) GetQuoteUpdateByID(
 }
 
 func (h *Handler) GetLatestQuote(
-	ctx context.Context, 
+	ctx context.Context,
 	request v1.GetLatestQuoteRequestObject,
-) (v1.GetLatestQuoteResponseObject, error) {	
+) (v1.GetLatestQuoteResponseObject, error) {
 	quote, err := h.svc.GetLatest(ctx, request.Params.Pair)
 	if err != nil {
 		switch {

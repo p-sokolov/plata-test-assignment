@@ -67,13 +67,13 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 	}
 
 	// declaring variables for project layers
-	repo := repository.New(a.dbPool)	
+	repo := repository.New(a.dbPool)
 	var cache *quotecache.Cache
 	if a.redis == nil {
 		cache = quotecache.New(nil, cfg.Redis.CacheTTL)
 	} else {
 		cache = quotecache.New(a.redis, cfg.Redis.CacheTTL)
-	}	
+	}
 	service := service.New(repo, cache)
 	handler := handler.New(service)
 

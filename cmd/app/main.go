@@ -16,10 +16,10 @@ import (
 )
 
 func main() {
-    if err := run(); err != nil {
-        slog.Error("application failed", "error", err)
-        os.Exit(1)
-    }
+	if err := run(); err != nil {
+		slog.Error("application failed", "error", err)
+		os.Exit(1)
+	}
 }
 
 func run() error {

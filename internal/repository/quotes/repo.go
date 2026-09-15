@@ -46,12 +46,12 @@ func toModelQuoteUpdate(q storage.QuoteUpdate) *models.QuoteUpdate {
 }
 
 func toModelIdempotencyKey(q storage.IdempotencyKey) *models.IdempotencyKey {
-	return &models.IdempotencyKey {
-		Key: q.Key,
-		RequestHash: q.RequestHash,
-		UpdateID: q.UpdateID,
+	return &models.IdempotencyKey{
+		Key:          q.Key,
+		RequestHash:  q.RequestHash,
+		UpdateID:     q.UpdateID,
 		ResponseCode: q.ResponseCode,
-		ExpiresAt: q.ExpiresAt,
-		CreatedAt: q.CreatedAt,
+		ExpiresAt:    q.ExpiresAt,
+		CreatedAt:    q.CreatedAt,
 	}
 }

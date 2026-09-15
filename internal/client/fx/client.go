@@ -5,15 +5,15 @@ import (
 )
 
 type Client struct {
-    baseURL   string
-    accessKey string
-    httpClient *http.Client
+	baseURL    string
+	accessKey  string
+	httpClient *http.Client
 }
 
 func New(baseURL, accessKey string, httpClient *http.Client) *Client {
 	return &Client{
-		baseURL: baseURL,
-		accessKey: accessKey,
+		baseURL:    baseURL,
+		accessKey:  accessKey,
 		httpClient: httpClient,
 	}
 }

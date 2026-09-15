@@ -21,7 +21,7 @@ const idempotencyTTL = 24 * time.Hour
 func (r *repo) Refresh(ctx context.Context, input models.RefreshInput) (uuid.UUID, error) {
 	var updateID uuid.UUID
 	transactor := repository.NewTransactor(r.db)
-	
+
 	refreshTx := func(ctx context.Context) error {
 		q := repository.Queries(ctx, r.queries)
 		if err := q.LockIdempotencyKey(ctx, input.IdempotencyKey); err != nil {
@@ -30,16 +30,16 @@ func (r *repo) Refresh(ctx context.Context, input models.RefreshInput) (uuid.UUI
 
 		requestHash := hashRequest(input.CurrencyPair)
 		existing, err := q.GetIdempotencyKey(ctx, input.IdempotencyKey)
-		
+
 		switch {
-			case err == nil:
-				if existing.RequestHash != requestHash {
-					return errorz.ErrIdempotencyConflict
-				}
-				updateID = existing.UpdateID
-				return nil
-			case !errors.Is(err, pgx.ErrNoRows):
-				return err
+		case err == nil:
+			if existing.RequestHash != requestHash {
+				return errorz.ErrIdempotencyConflict
+			}
+			updateID = existing.UpdateID
+			return nil
+		case !errors.Is(err, pgx.ErrNoRows):
+			return err
 		}
 
 		quoteUpdate, err := q.CreateOrGetActiveQuoteUpdate(ctx, input.CurrencyPair)
@@ -61,7 +61,7 @@ func (r *repo) Refresh(ctx context.Context, input models.RefreshInput) (uuid.UUI
 		updateID = key.UpdateID
 		return nil
 	}
-	
+
 	err := transactor.RunInTx(ctx, refreshTx)
 	if err != nil {
 		return uuid.Nil, err

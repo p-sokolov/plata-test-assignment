@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"plata-test-assignment/internal/errorz"
-	v1 "plata-test-assignment/internal/transport/http/v1"
 	"log/slog"
 	"net/http"
+	"plata-test-assignment/internal/errorz"
+	v1 "plata-test-assignment/internal/transport/http/v1"
 
 	"github.com/labstack/echo/v4"
 )

@@ -150,7 +150,7 @@ func (w *Worker) retryDelay(attempt int32) time.Duration {
 	if attempt < 1 {
 		attempt = 1
 	}
-	
+
 	// Calculate the exponential delay based on the attempt number: BaseDelay * 2^(AttemptCount)
 	// Use a bitwise shift (1 << count-1) to raise 2 to the power
 	shift := uint(attempt - 1)
