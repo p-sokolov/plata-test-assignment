@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"plata-test-assignment/internal/errorz"
+	"plata-test-assignment/internal/client/fx"
+	worker "plata-test-assignment/internal/worker/quotes"
 	custommiddleware "plata-test-assignment/internal/transport/http/middleware"
 	v1 "plata-test-assignment/internal/transport/http/v1"
 	swaggerui "plata-test-assignment/pkg/swagger-ui"
@@ -33,9 +35,10 @@ type App struct {
 	l      *slog.Logger
 	e      *echo.Echo
 	dbPool *pgxpool.Pool
+	w	   *worker.Worker
 }
 
-// New creates and initializes a new instance of App
+// New creates and initializes a new instance of App.
 func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) {
 	a := &App{
 		cfg: cfg,
@@ -57,6 +60,22 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 	repo := repository.New(a.dbPool)
 	service := service.New(repo)
 	handler := handler.New(service)
+	
+	// create foreign exchange instance
+	fxClient := fx.New(
+	    cfg.FX.BaseURL,
+	    cfg.FX.APIKey,
+	    &http.Client{Timeout: cfg.FX.Timeout},
+	)
+
+	// create worker
+	workerCfg := &worker.Config {
+		PollInterval: a.cfg.Worker.Interval,
+		LeaseDuration: a.cfg.Worker.Duration,
+		MaxAttempts: a.cfg.Worker.Attempts,
+	}
+	worker := worker.New(repo, fxClient, workerCfg, a.l)
+	a.w = worker
 
 	apiGroup := a.e.Group("/api/v1")
 
@@ -72,16 +91,17 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 	return a, nil
 }
 
-// Start performs a start of all functional services
-func (a *App) Start() error {
+// Start performs a start of all functional services.
+func (a *App) Start(ctx context.Context) error {
 	a.l.Info("Starting...")
+	go a.w.Run(ctx)
 	if err := a.e.Start(a.cfg.HttpSrv.Addr); err != nil {
 		return err
-	}
+	}	
 	return nil
 }
 
-// Stop performs a graceful shutdown for all components
+// Stop performs a graceful shutdown for all components.
 func (a *App) Stop(ctx context.Context) error {
 	a.l.Info("[!] Shutting down...")
 
@@ -103,7 +123,7 @@ func (a *App) Stop(ctx context.Context) error {
 	return nil
 }
 
-// initDB initializes a new pool for PostgreSQL db
+// initDB initializes a new pool for PostgreSQL db.
 func initDB(ctx context.Context, dbURL string, maxConns int32) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
@@ -124,7 +144,7 @@ func initDB(ctx context.Context, dbURL string, maxConns int32) (*pgxpool.Pool, e
 	return pool, nil
 }
 
-// initDB sets up PostgreSQL db
+// initDB sets up PostgreSQL db.
 func (a *App) initDB(ctx context.Context) error {
 	dbPool, err := initDB(ctx, a.cfg.Postgres.URL, a.cfg.Postgres.MaxConns)
 	if err != nil {
@@ -134,7 +154,7 @@ func (a *App) initDB(ctx context.Context) error {
 	return nil
 }
 
-// migrateDB performs a migration to ensure the schema is up to date
+// migrateDB performs a migration to ensure the schema is up to date.
 func (a *App) migrateDB() error {
 	conn := sql.OpenDB(stdlib.GetConnector(*a.dbPool.Config().ConnConfig))
 	defer conn.Close()
@@ -142,7 +162,7 @@ func (a *App) migrateDB() error {
 	return env.Migrate(conn)
 }
 
-// initEcho sets up a new Echo instance with logger
+// initEcho sets up a new Echo instance with logger.
 func (a *App) initEcho() error {
 	a.e = echo.New()
 	a.e.HideBanner = true
@@ -202,3 +222,4 @@ func (a *App) initEcho() error {
 
 	return nil
 }
+
