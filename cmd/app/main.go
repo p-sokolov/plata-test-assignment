@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,6 +16,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("application failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// setting up the logger
 	logger := setupLogger()
 
@@ -25,15 +33,22 @@ func main() {
 	// init config
 	cfg, err := config.New(ctx)
 	if err != nil {
-		logger.Error("failed to read config", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to read config: %w", err)
 	}
 
 	// create app instance
 	a, err := app.New(ctx, cfg, logger)
 	if err != nil {
-		logger.Error("failed to create app", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to create app: %w", err)
+	}
+	shutdown := func() error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := a.Stop(shutdownCtx); err != nil {
+			return fmt.Errorf("failed to stop server gracefully: %w", err)
+		}
+		return nil
 	}
 
 	// start app with error channel
@@ -45,22 +60,28 @@ func main() {
 		close(errChan)
 	}()
 
-	// wait until receiving stop signal from app or client
+	// Wait for either the server to stop or an OS shutdown signal.
 	select {
 	case err := <-errChan:
+		shutdownErr := shutdown()
 		if err != nil {
-			logger.Error("server stopped unexpectedly", slog.Any("error", err))
-			os.Exit(1)
+			return errors.Join(
+				fmt.Errorf("server stopped unexpectedly: %w", err),
+				shutdownErr,
+			)
 		}
+		if shutdownErr != nil {
+			return shutdownErr
+		}
+		return errors.New("server stopped unexpectedly")
 	case <-ctx.Done():
 		logger.Info("shutdown signal received")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := a.Stop(shutdownCtx); err != nil {
-			logger.Error("failed to stop server gracefully", slog.Any("error", err))
-			os.Exit(1)
+		if err := shutdown(); err != nil {
+			return err
 		}
 	}
+
+	return nil
 }
 
 func setupLogger() *slog.Logger {

@@ -10,7 +10,7 @@ import (
 )
 
 func (h *Handler) RefreshQuote(
-	ctx context.Context, 
+	ctx context.Context,
 	request v1.RefreshQuoteRequestObject,
 ) (v1.RefreshQuoteResponseObject, error) {
 	if request.Body == nil {

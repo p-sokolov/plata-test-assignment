@@ -45,7 +45,7 @@ func (c *Cache) SetLatest(ctx context.Context, quote models.LatestQuote) error {
 	if c.client == nil {
 		return nil
 	}
-	
+
 	value, err := json.Marshal(quote)
 	if err != nil {
 		return fmt.Errorf("encode latest quote for cache failed: %w", err)

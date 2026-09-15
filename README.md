@@ -1,3 +1,6 @@
+
+![CI](https://github.com/p-sokolov/my-calendar/actions/workflows/ci.yml/badge.svg)
+
 # Currency Quote Service
 
 An asynchronous Go service that refreshes and serves exchange-rate quotes for
