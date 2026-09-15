@@ -8,13 +8,14 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
-	"plata-test-assignment/internal/errorz"
 	"plata-test-assignment/internal/client/fx"
-	worker "plata-test-assignment/internal/worker/quotes"
+	"plata-test-assignment/internal/errorz"
 	custommiddleware "plata-test-assignment/internal/transport/http/middleware"
 	v1 "plata-test-assignment/internal/transport/http/v1"
+	worker "plata-test-assignment/internal/worker/quotes"
 	swaggerui "plata-test-assignment/pkg/swagger-ui"
 
 	"plata-test-assignment/env"
@@ -35,7 +36,9 @@ type App struct {
 	l      *slog.Logger
 	e      *echo.Echo
 	dbPool *pgxpool.Pool
-	w	   *worker.Worker
+	w      *worker.Worker
+	wg     sync.WaitGroup
+	cancel context.CancelFunc
 }
 
 // New creates and initializes a new instance of App.
@@ -60,22 +63,28 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 	repo := repository.New(a.dbPool)
 	service := service.New(repo)
 	handler := handler.New(service)
-	
+
 	// create foreign exchange instance
 	fxClient := fx.New(
-	    cfg.FX.BaseURL,
-	    cfg.FX.APIKey,
-	    &http.Client{Timeout: cfg.FX.Timeout},
+		cfg.FX.BaseURL,
+		cfg.FX.APIKey,
+		&http.Client{Timeout: cfg.FX.Timeout},
 	)
 
 	// create worker
-	workerCfg := &worker.Config {
-		PollInterval: a.cfg.Worker.Interval,
-		LeaseDuration: a.cfg.Worker.Duration,
-		MaxAttempts: a.cfg.Worker.Attempts,
+	workerCfg := worker.Config{
+		PollInterval:   a.cfg.Worker.Interval,
+		LeaseDuration:  a.cfg.Worker.Duration,
+		MaxAttempts:    a.cfg.Worker.Attempts,
+		RetryBaseDelay: a.cfg.Worker.BackoffBaseDelay,
+		RetryMaxDelay:  a.cfg.Worker.BackoffMaxDelay,
 	}
-	worker := worker.New(repo, fxClient, workerCfg, a.l)
-	a.w = worker
+	quoteWorker, err := worker.New(repo, fxClient, workerCfg, a.l)
+	if err != nil {
+		a.dbPool.Close()
+		return nil, fmt.Errorf("create quote worker: %w", err)
+	}
+	a.w = quoteWorker
 
 	apiGroup := a.e.Group("/api/v1")
 
@@ -94,10 +103,18 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 // Start performs a start of all functional services.
 func (a *App) Start(ctx context.Context) error {
 	a.l.Info("Starting...")
-	go a.w.Run(ctx)
+
+	workerCtx, cancel := context.WithCancel(ctx)
+	a.cancel = cancel
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		a.w.Run(workerCtx)
+	}()
+
 	if err := a.e.Start(a.cfg.HttpSrv.Addr); err != nil {
 		return err
-	}	
+	}
 	return nil
 }
 
@@ -111,6 +128,11 @@ func (a *App) Stop(ctx context.Context) error {
 	if err := a.e.Shutdown(ctx); err != nil {
 		stopErr = errors.Join(stopErr, fmt.Errorf("failed to shutdown http server: %w", err))
 	}
+
+	if a.cancel != nil {
+		a.cancel()
+	}
+	a.wg.Wait()
 
 	a.l.Info("Closing database pool...")
 	a.dbPool.Close()
@@ -222,4 +244,3 @@ func (a *App) initEcho() error {
 
 	return nil
 }
-
