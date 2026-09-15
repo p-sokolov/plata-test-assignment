@@ -14,12 +14,18 @@ coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
+# Dependency directories
 # vendor/
 
 # Go workspace file
 go.work
 go.work.sum
+
+# Task checksum
+.task
+
+# Air live-reload output
+tmp/
 
 # env file
 .env

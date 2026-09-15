@@ -1,0 +1,26 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build --buildvcs=false -o ./tmp/main ./cmd/app"
+bin = "./tmp/main"
+delay = 500
+exclude_dir = [".git", ".task", "tmp", "vendor"]
+exclude_regex = ["_test.go"]
+include_ext = ["go"]
+poll = true
+poll_interval = 500
+stop_on_error = true
+
+[color]
+app = ""
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
