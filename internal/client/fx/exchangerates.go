@@ -22,7 +22,7 @@ func (c *Client) GetRate(ctx context.Context, pair string) (float64, error) {
 
 func (c *Client) convertCurrency(
 	ctx context.Context,
-	pair string, 
+	pair string,
 	amount float64,
 ) (*FXResponse, error) {
 	u, err := url.Parse(c.baseURL)
@@ -65,16 +65,18 @@ func (c *Client) convertCurrency(
 
 	// All status codes described in exchanger specs
 	switch res.StatusCode {
-		case http.StatusBadRequest, 
-		     http.StatusUnauthorized, 
-		     http.StatusForbidden, 
-		     http.StatusNotFound, 
-		     http.StatusTooManyRequests, 
-		     http.StatusInternalServerError, 
-		     http.StatusServiceUnavailable:
-			return nil, fmt.Errorf("Client %s with status code: %d", http.StatusText(res.StatusCode), res.StatusCode)
-		default:
-			return nil, fmt.Errorf("Client Error with status code: %d", res.StatusCode)
+	case http.StatusBadRequest,
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusNotFound,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusServiceUnavailable:
+		return nil, fmt.Errorf("Client %s with status code: %d", http.StatusText(res.StatusCode), res.StatusCode)
+	default:
+		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+			return nil, fmt.Errorf("unexpected response status: %s", res.Status)
+		}
 	}
 
 	// Parse json to struct
