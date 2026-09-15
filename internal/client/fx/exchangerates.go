@@ -12,7 +12,7 @@ import (
 )
 
 func (c *Client) GetRate(ctx context.Context, pair string) (float64, error) {
-	result, err := convertCurrency(ctx, c, pair, 1)
+	result, err := c.convertCurrency(ctx, pair, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -20,9 +20,8 @@ func (c *Client) GetRate(ctx context.Context, pair string) (float64, error) {
 	return result.Result, err
 }
 
-func convertCurrency(
+func (c *Client) convertCurrency(
 	ctx context.Context,
-	c *Client,
 	pair string, 
 	amount float64,
 ) (*FXResponse, error) {
@@ -62,6 +61,20 @@ func convertCurrency(
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("Response parsing failed: %w", err)
+	}
+
+	// All status codes described in exchanger specs
+	switch res.StatusCode {
+		case http.StatusBadRequest, 
+		     http.StatusUnauthorized, 
+		     http.StatusForbidden, 
+		     http.StatusNotFound, 
+		     http.StatusTooManyRequests, 
+		     http.StatusInternalServerError, 
+		     http.StatusServiceUnavailable:
+			return nil, fmt.Errorf("Client %s with status code: %d", http.StatusText(res.StatusCode), res.StatusCode)
+		default:
+			return nil, fmt.Errorf("Client Error with status code: %d", res.StatusCode)
 	}
 
 	// Parse json to struct
