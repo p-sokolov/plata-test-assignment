@@ -4,7 +4,7 @@ vars:
   OPENAPI_SPEC: api/openapi.yaml
   OPENAPI_CONFIG: oapi-codegen.yaml
   OPENAPI_OUT: internal/transport/http/v1/api.gen.go
-  SQLC_CONFIG: internal/repository/db/sqlc/sqlc.yaml
+  SQLC_CONFIG: internal/repository/postgres/sqlc/sqlc.yaml
   DOCKER_ENV: .env
   COMPOSE_FILE: env/compose.yaml
   DEV_COMPOSE_FILE: env/compose-dev.yaml
