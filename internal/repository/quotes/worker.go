@@ -54,7 +54,7 @@ func (r *repo) MarkSucceeded(ctx context.Context, rate float64, id, leaseToken u
 	params := storage.MarkQuoteUpdateSucceededParams{
 		Rate:       pgRate,
 		ID:         id,
-		LeaseToken: leaseToken,
+		LeaseToken: &leaseToken,
 	}
 
 	_, err := q.MarkQuoteUpdateSucceeded(ctx, params)
@@ -81,7 +81,7 @@ func (r *repo) ScheduleRetry(ctx context.Context, errMsg string, nextAttemptAt t
 		ErrorMessage:  pgErrMsg,
 		NextAttemptAt: nextAttemptAt,
 		ID:            id,
-		LeaseToken:    leaseToken,
+		LeaseToken:    &leaseToken,
 	}
 
 	_, err := q.ScheduleQuoteUpdateRetry(ctx, params)
@@ -107,7 +107,7 @@ func (r *repo) MarkFailed(ctx context.Context, errMsg string, id, leaseToken uui
 	params := storage.MarkQuoteUpdateFailedParams{
 		ErrorMessage: pgErrMsg,
 		ID:           id,
-		LeaseToken:   leaseToken,
+		LeaseToken:   &leaseToken,
 	}
 
 	_, err := q.MarkQuoteUpdateFailed(ctx, params)
