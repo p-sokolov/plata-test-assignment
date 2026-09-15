@@ -13,11 +13,11 @@ services:
       - ../:/app
       - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
+    env_file:
+      - ../.env
     environment:
       SERVER_ADDR: 0.0.0.0:8080
       POSTGRES_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
-      POSTGRES_MAX_CONNS: ${POSTGRES_MAX_CONNS:-10}
-
     depends_on:
       postgres:
         condition: service_healthy

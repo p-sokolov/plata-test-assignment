@@ -19,10 +19,10 @@ CREATE TABLE quote_updates (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- It avoids contradictions between status, result, and lease
     CHECK (
-        (status = 'SUCCESS' AND rate IS NOT NULL AND error_message IS NULL AND locked_until IS NULL)
-        OR (status = 'FAILED' AND rate IS NULL AND error_message IS NOT NULL AND locked_until IS NULL)
-        OR (status = 'PENDING' AND rate IS NULL AND locked_until IS NULL)
-        OR (status = 'PROCESSING' AND rate IS NULL AND locked_until IS NOT NULL)
+        (status = 'SUCCESS' AND rate IS NOT NULL AND error_message IS NULL AND locked_until IS NULL AND lease_token IS NULL)
+        OR (status = 'FAILED' AND rate IS NULL AND error_message IS NOT NULL AND locked_until IS NULL AND lease_token IS NULL)
+        OR (status = 'PENDING' AND rate IS NULL AND locked_until IS NULL AND lease_token IS NULL)
+        OR (status = 'PROCESSING' AND rate IS NULL AND locked_until IS NOT NULL AND lease_token IS NOT NULL)
     )
 );
 
