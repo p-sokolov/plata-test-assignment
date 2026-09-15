@@ -3,6 +3,7 @@ package fx
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,10 +25,10 @@ func (c *Client) convertCurrency(
 	ctx context.Context,
 	pair string,
 	amount float64,
-) (*FXResponse, error) {
+) (response *FXResponse, err error) {
 	u, err := url.Parse(c.baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed URL parsing: %w", err)
+		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
 	if len(pair) != 7 {
@@ -47,20 +48,24 @@ func (c *Client) convertCurrency(
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("Request creating error: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Add("Accept", "application/json, application/json; Charset=UTF-8")
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if closeErr := res.Body.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close response body: %w", closeErr))
+		}
+	}()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Response parsing failed: %w", err)
+		return nil, fmt.Errorf("response parsing failed: %w", err)
 	}
 
 	// All status codes described in exchanger specs
@@ -72,7 +77,7 @@ func (c *Client) convertCurrency(
 		http.StatusTooManyRequests,
 		http.StatusInternalServerError,
 		http.StatusServiceUnavailable:
-		return nil, fmt.Errorf("Client %s with status code: %d", http.StatusText(res.StatusCode), res.StatusCode)
+		return nil, fmt.Errorf("client %s with status code: %d", http.StatusText(res.StatusCode), res.StatusCode)
 	default:
 		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 			return nil, fmt.Errorf("unexpected response status: %s", res.Status)
@@ -82,11 +87,11 @@ func (c *Client) convertCurrency(
 	// Parse json to struct
 	var apiRes FXResponse
 	if err := json.Unmarshal(body, &apiRes); err != nil {
-		return nil, fmt.Errorf("JSON parsing failed: %w", err)
+		return nil, fmt.Errorf("parse JSON response: %w", err)
 	}
 
 	if !apiRes.Success {
-		return &apiRes, fmt.Errorf("API server error")
+		return &apiRes, errors.New("api server error")
 	}
 
 	return &apiRes, nil

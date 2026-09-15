@@ -94,11 +94,14 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 	}
 	quoteWorker, err := worker.New(repo, fxClient, cache, workerCfg, a.l)
 	if err != nil {
+		var closeErr error
 		if a.redis != nil {
-			a.redis.Close()
+			if err := a.redis.Close(); err != nil {
+				closeErr = fmt.Errorf("close redis client: %w", err)
+			}
 		}
 		a.dbPool.Close()
-		return nil, fmt.Errorf("create quote worker: %w", err)
+		return nil, errors.Join(fmt.Errorf("create quote worker: %w", err), closeErr)
 	}
 	a.w = quoteWorker
 
@@ -153,7 +156,9 @@ func (a *App) Stop(ctx context.Context) error {
 	a.l.Info("Closing database pool...")
 	a.dbPool.Close()
 	if a.redis != nil {
-		a.redis.Close()
+		if err := a.redis.Close(); err != nil {
+			stopErr = errors.Join(stopErr, fmt.Errorf("close redis client: %w", err))
+		}
 	}
 
 	if stopErr != nil {
@@ -206,8 +211,11 @@ func (a *App) initRedis(ctx context.Context) error {
 
 	client := redis.NewClient(options)
 	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
-		return fmt.Errorf("connect to redis: %w", err)
+		connectErr := fmt.Errorf("connect to redis: %w", err)
+		if closeErr := client.Close(); closeErr != nil {
+			return errors.Join(connectErr, fmt.Errorf("close redis client: %w", closeErr))
+		}
+		return connectErr
 	}
 	a.redis = client
 	return nil
@@ -216,9 +224,12 @@ func (a *App) initRedis(ctx context.Context) error {
 // migrateDB performs a migration to ensure the schema is up to date.
 func (a *App) migrateDB() error {
 	conn := sql.OpenDB(stdlib.GetConnector(*a.dbPool.Config().ConnConfig))
-	defer conn.Close()
+	migrationErr := env.Migrate(conn)
+	if closeErr := conn.Close(); closeErr != nil {
+		return errors.Join(migrationErr, fmt.Errorf("close migration database connection: %w", closeErr))
+	}
 
-	return env.Migrate(conn)
+	return migrationErr
 }
 
 // initEcho sets up a new Echo instance with logger.
@@ -243,14 +254,14 @@ func (a *App) initEcho() error {
 					slog.String("uri", v.URI),
 					slog.Int("status", v.Status),
 					slog.String("ip", v.RemoteIP),
-					slog.String("latency", time.Now().Sub(v.StartTime).String()),
+					slog.String("latency", time.Since(v.StartTime).String()),
 				)
 			} else {
 				a.l.LogAttrs(context.Background(), slog.LevelError, "REQUEST_ERROR",
 					slog.String("uri", v.URI),
 					slog.Int("status", v.Status),
 					slog.String("ip", v.RemoteIP),
-					slog.String("latency", time.Now().Sub(v.StartTime).String()),
+					slog.String("latency", time.Since(v.StartTime).String()),
 					slog.String("err", v.Error.Error()),
 				)
 			}
