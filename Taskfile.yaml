@@ -18,7 +18,7 @@ tasks:
     generates:
       - '{{.OPENAPI_OUT}}'
     cmds:
-      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}}
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0 -config {{.OPENAPI_CONFIG}} {{.OPENAPI_SPEC}}
 
   gen:sqlc:
     desc: Generate type-safe Go code from SQL queries
@@ -50,6 +50,16 @@ tasks:
     cmds:
       - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} logs -f
 
+  tools:up:
+    desc: Start Adminer and Redis Insight alongside the production-like stack
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} --profile tools up -d adminer redisinsight
+
+  tools:down:
+    desc: Stop Adminer and Redis Insight
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.COMPOSE_FILE}} --profile tools stop adminer redisinsight
+
   dev:up:
     desc: Start development containers with Air live reload
     cmds:
@@ -64,3 +74,13 @@ tasks:
     desc: Follow logs of the development stack
     cmds:
       - docker compose --env-file {{.DOCKER_ENV}} -f {{.DEV_COMPOSE_FILE}} logs -f
+
+  dev:tools:up:
+    desc: Start Adminer and Redis Insight alongside development containers
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.DEV_COMPOSE_FILE}} --profile tools up -d adminer redisinsight
+
+  dev:tools:down:
+    desc: Stop Adminer and Redis Insight in development
+    cmds:
+      - docker compose --env-file {{.DOCKER_ENV}} -f {{.DEV_COMPOSE_FILE}} --profile tools stop adminer redisinsight
