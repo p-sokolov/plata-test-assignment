@@ -1,0 +1,77 @@
+{
+  "info": {
+    "name": "Quote Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "refreshKey", "value": "postman-eur-mxn-demo-0001" },
+    { "key": "updateId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Refresh EUR/MXN (new task)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Idempotency-Key", "value": "{{refreshKey}}" }],
+        "body": { "mode": "raw", "raw": "{\n  \"currency_pair\": \"EUR/MXN\"\n}" },
+        "url": "{{baseUrl}}/quotes/refresh",
+        "description": "Queues an asynchronous EUR/MXN quote refresh.\n\n- **Request:** `POST {{baseUrl}}/quotes/refresh`\n- **Required headers:** `Content-Type: application/json` and `Idempotency-Key: {{refreshKey}}`\n- **Body:** `{\"currency_pair\":\"EUR/MXN\"}`\n- **Expected:** HTTP `202` with an `update_id` UUID.\n- Stores `update_id` as collection variable `updateId` for requests 2–4."
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('accepted', () => pm.response.to.have.status(202));", "const body = pm.response.json();", "pm.test('returns an update UUID', () => pm.expect(body.update_id).to.match(/^[0-9a-f-]{36}$/));", "pm.collectionVariables.set('updateId', body.update_id);"] } }]
+    },
+    {
+      "name": "2. Refresh EUR/MXN (same key, same body)",      
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Idempotency-Key", "value": "{{refreshKey}}" }],
+        "body": { "mode": "raw", "raw": "{\n  \"currency_pair\": \"EUR/MXN\"\n}" },
+        "url": "{{baseUrl}}/quotes/refresh",
+        "description": "Repeats request 1 without changing the idempotency key or body.\n\n- **Request:** `POST {{baseUrl}}/quotes/refresh`\n- **Expected:** HTTP `202` and exactly the same `update_id` as request 1.\n- **Demonstrates:** safe client retries; a duplicate task is not created."
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('accepted replay', () => pm.response.to.have.status(202));", "pm.test('returns the original task', () => pm.expect(pm.response.json().update_id).to.eql(pm.collectionVariables.get('updateId')));"] } }]
+    },
+    {
+      "name": "3. Refresh USD/EUR (same key, different body)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Idempotency-Key", "value": "{{refreshKey}}" }],
+        "body": { "mode": "raw", "raw": "{\n  \"currency_pair\": \"USD/EUR\"\n}" },
+        "url": "{{baseUrl}}/quotes/refresh",
+        "description": "Reuses the idempotency key from request 1 with a different request body.\n\n- **Request:** `POST {{baseUrl}}/quotes/refresh`\n- **Body:** `{\"currency_pair\":\"USD/EUR\"}`\n- **Expected:** HTTP `409`.\n- **Demonstrates:** the service rejects accidental reuse of a key for a different operation."
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('conflicting key is rejected', () => pm.response.to.have.status(409));"] } }]
+    },
+    {
+      "name": "4. Get EUR/MXN update (poll status)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/quotes/updates/{{updateId}}", "description": "Reads the background task created in request 1. Wait one or two seconds and rerun until it is `SUCCESS`.\n\n- **Request:** `GET {{baseUrl}}/quotes/updates/{{updateId}}`\n- **Expected:** HTTP `200` and status `PENDING`, `PROCESSING`, `SUCCESS`, or `FAILED`.\n- **Demonstrates:** asynchronous processing and observable task state." },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('update is found', () => pm.response.to.have.status(200));", "pm.test('state is valid', () => pm.expect(['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED']).to.include(pm.response.json().status));"] } }]
+    },
+    {
+      "name": "5. Get latest EUR/MXN rate (after SUCCESS)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/quotes/latest?pair=EUR%2FMXN", "description": "Returns the latest successfully stored EUR/MXN rate. Execute after request 4 reports `SUCCESS`.\n\n- **Request:** `GET {{baseUrl}}/quotes/latest?pair=EUR%2FMXN`\n- **Expected:** HTTP `200` with `currency_pair`, numeric `rate`, and `updated_at`.\n- **Demonstrates:** the public read endpoint and the Redis cache-aside path." },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('latest rate is found', () => pm.response.to.have.status(200));", "pm.test('rate is a number', () => pm.expect(pm.response.json().rate).to.be.a('number'));"] } }]
+    },
+    {
+      "name": "6. Refresh GBP/JPY (unsupported pair)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Idempotency-Key", "value": "postman-invalid-pair-0001" }],
+        "body": { "mode": "raw", "raw": "{\n  \"currency_pair\": \"GBP/JPY\"\n}" },
+        "url": "{{baseUrl}}/quotes/refresh",
+        "description": "Attempts to queue a pair outside the supported USD/EUR/MXN set.\n\n- **Request:** `POST {{baseUrl}}/quotes/refresh`\n- **Body:** `{\"currency_pair\":\"GBP/JPY\"}`\n- **Expected:** HTTP `400`.\n- **Demonstrates:** business validation happens before a task is written to the database."
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('unsupported pair returns 400', () => pm.response.to.have.status(400));"] } }]
+    },
+    {
+      "name": "7. Get update (unknown UUID)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/quotes/updates/00000000-0000-0000-0000-000000000000", "description": "Requests a syntactically valid UUID that does not exist in the database.\n\n- **Request:** `GET {{baseUrl}}/quotes/updates/00000000-0000-0000-0000-000000000000`\n- **Expected:** HTTP `404`.\n- **Demonstrates:** not-found handling for task lookup." },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('missing update returns 404', () => pm.response.to.have.status(404));"] } }]
+    },
+    {
+      "name": "8. Get latest USD/MXN (no successful quote)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/quotes/latest?pair=USD%2FMXN", "description": "Requests a supported pair for which this demo did not create a successful quote.\n\n- **Request:** `GET {{baseUrl}}/quotes/latest?pair=USD%2FMXN`\n- **Expected:** HTTP `404`.\n- **Demonstrates:** the distinction between a valid pair and unavailable quote data." },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('missing latest rate returns 404', () => pm.response.to.have.status(404));"] } }]
+    }
+  ]
+}
