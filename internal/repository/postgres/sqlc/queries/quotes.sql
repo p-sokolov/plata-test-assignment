@@ -31,6 +31,7 @@ WITH candidate AS (
 UPDATE quote_updates
 SET status = 'PROCESSING',
     locked_until = $1,
+    lease_token = gen_random_uuid(),
     attempt_count = attempt_count + 1,
     updated_at = NOW()
 WHERE id IN (SELECT id FROM candidate)
@@ -40,6 +41,7 @@ RETURNING quote_updates.*;
 UPDATE quote_updates
 SET status = 'PENDING',
     locked_until = NULL,
+    lease_token = NULL,
     next_attempt_at = NOW(),
     updated_at = NOW()
 WHERE status = 'PROCESSING'
@@ -51,10 +53,12 @@ SET status = 'SUCCESS',
     rate = $1,
     error_message = NULL,
     locked_until = NULL,
+    lease_token = NULL,
     updated_at = NOW()
 WHERE id = $2
   AND status = 'PROCESSING'
   AND locked_until > NOW()
+  AND lease_token = $3
 RETURNING quote_updates.*;
 
 -- name: ScheduleQuoteUpdateRetry :one
@@ -62,11 +66,13 @@ UPDATE quote_updates
 SET status = 'PENDING',
     error_message = $1,
     locked_until = NULL,
+    lease_token = NULL,
     next_attempt_at = $2,
     updated_at = NOW()
 WHERE id = $3
   AND status = 'PROCESSING'
   AND locked_until > NOW()
+  AND lease_token = $4
 RETURNING quote_updates.*;
 
 -- name: MarkQuoteUpdateFailed :one
@@ -75,10 +81,12 @@ SET status = 'FAILED',
     rate = NULL,
     error_message = $1,
     locked_until = NULL,
+    lease_token = NULL,
     updated_at = NOW()
 WHERE id = $2
   AND status = 'PROCESSING'
   AND locked_until > NOW()
+  AND lease_token = $3
 RETURNING quote_updates.*;
 
 -- name: LockIdempotencyKey :exec
