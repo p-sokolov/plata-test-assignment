@@ -20,6 +20,15 @@ type QuoteUpdate struct {
 	UpdatedAt     time.Time
 }
 
+type IdempotencyKey struct {
+	Key          string
+	RequestHash  string
+	UpdateID     uuid.UUID
+	ResponseCode int16
+	ExpiresAt    time.Time
+	CreatedAt    time.Time
+}
+
 type RefreshInput struct {
 	CurrencyPair   string
 	IdempotencyKey string
