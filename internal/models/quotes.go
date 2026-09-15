@@ -20,6 +20,12 @@ type QuoteUpdate struct {
 	UpdatedAt     time.Time
 }
 
+type LatestQuote struct {
+	CurrencyPair string
+	Rate         float64
+	UpdatedAt    time.Time
+}
+
 type IdempotencyKey struct {
 	Key          string
 	RequestHash  string

@@ -10,6 +10,7 @@ import (
 type Config struct {
 	HttpSrv  httpServer
 	Postgres postgres
+	Redis    redisConfig
 	FX       fxConfig
 	Worker   workerConfig
 }
@@ -21,6 +22,11 @@ type httpServer struct {
 type postgres struct {
 	URL      string `env:"POSTGRES_URL" env-required:"true"`
 	MaxConns int32  `env:"POSTGRES_MAX_CONNS" env-default:"10"`
+}
+
+type redisConfig struct {
+	URL      string        `env:"REDIS_URL" env-default:""`
+	CacheTTL time.Duration `env:"REDIS_CACHE_TTL" env-default:"30s"`
 }
 
 type fxConfig struct {

@@ -24,6 +24,11 @@ type repository interface {
 	MarkFailed(ctx context.Context, errMsg string, id, leaseToken uuid.UUID) (bool, error)
 }
 
+// interface for redis integration
+type latestCache interface {
+	DeleteLatest(ctx context.Context, pair string) error
+}
+
 type Config struct {
 	PollInterval  time.Duration
 	LeaseDuration time.Duration
@@ -36,11 +41,12 @@ type Config struct {
 type Worker struct {
 	repo     repository
 	provider rateProvider
+	cache    latestCache
 	cfg      Config
 	logger   *slog.Logger
 }
 
-func New(r repository, p rateProvider, cfg Config, l *slog.Logger) (*Worker, error) {
+func New(r repository, p rateProvider, cache latestCache, cfg Config, l *slog.Logger) (*Worker, error) {
 	if cfg.PollInterval <= 0 || cfg.LeaseDuration <= 0 {
 		return nil, fmt.Errorf("worker poll interval and lease duration must be positive")
 	}
@@ -51,7 +57,7 @@ func New(r repository, p rateProvider, cfg Config, l *slog.Logger) (*Worker, err
 		return nil, fmt.Errorf("worker retry delays are invalid")
 	}
 
-	return &Worker{repo: r, provider: p, cfg: cfg, logger: l}, nil
+	return &Worker{repo: r, provider: p, cache: cache, cfg: cfg, logger: l}, nil
 }
 
 // Run processes queued updates until ctx is cancelled.
@@ -72,35 +78,6 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
-// ProcessOnce claims and handles one update. processed reports whether it claimed work.
-func (w *Worker) ProcessOnce(ctx context.Context) (processed bool, err error) {
-	nextTask, err := w.repo.ClaimNext(ctx, time.Now().Add(w.cfg.LeaseDuration))
-	if err != nil {
-		return false, err
-	}
-	if nextTask == nil {
-		return false, nil
-	}
-	if nextTask.LeaseToken == nil {
-		return true, fmt.Errorf("claimed quote update %s has no lease token", nextTask.ID)
-	}
-
-	rate, err := w.provider.GetRate(ctx, nextTask.CurrencyPair)
-	if err != nil {
-		if nextTask.AttemptCount >= w.cfg.MaxAttempts {
-			applied, markErr := w.repo.MarkFailed(ctx, err.Error(), nextTask.ID, *nextTask.LeaseToken)
-			return w.finish(nextTask, applied, markErr)
-		}
-
-		nextAttemptAt := time.Now().Add(w.retryDelay(nextTask.AttemptCount))
-		applied, retryErr := w.repo.ScheduleRetry(ctx, err.Error(), nextAttemptAt, nextTask.ID, *nextTask.LeaseToken)
-		return w.finish(nextTask, applied, retryErr)
-	}
-
-	applied, markErr := w.repo.MarkSucceeded(ctx, rate, nextTask.ID, *nextTask.LeaseToken)
-	return w.finish(nextTask, applied, markErr)
-}
-
 func (w *Worker) processAvailable(ctx context.Context) error {
 	if _, err := w.repo.RequeueExpired(ctx); err != nil {
 		return err
@@ -117,9 +94,50 @@ func (w *Worker) processAvailable(ctx context.Context) error {
 	}
 }
 
+// ProcessOnce claims and handles one update. processed reports whether it claimed work.
+func (w *Worker) ProcessOnce(ctx context.Context) (processed bool, err error) {
+	nextTask, err := w.repo.ClaimNext(ctx, time.Now().Add(w.cfg.LeaseDuration))
+	if err != nil {
+		return false, err
+	}
+	if nextTask == nil {
+		return false, nil
+	}
+	if nextTask.LeaseToken == nil {
+		return true, fmt.Errorf("claimed quote update %s has no lease token", nextTask.ID)
+	}
+
+	// Get currency rate from foreign api server
+	rate, err := w.provider.GetRate(ctx, nextTask.CurrencyPair)
+	if err != nil {
+		if nextTask.AttemptCount >= w.cfg.MaxAttempts {
+			// Worker sets task status to FAILED
+			applied, markErr := w.repo.MarkFailed(ctx, err.Error(), nextTask.ID, *nextTask.LeaseToken)
+			return w.finish(nextTask, applied, markErr)
+		}
+
+		nextAttemptAt := time.Now().Add(w.retryDelay(nextTask.AttemptCount))
+		// Worker sets task status to PENDING and specifies the time of the next attempt
+		applied, retryErr := w.repo.ScheduleRetry(ctx, err.Error(), nextAttemptAt, nextTask.ID, *nextTask.LeaseToken)
+		return w.finish(nextTask, applied, retryErr)
+	}
+
+	// Worker sets task status to SUCCESS
+	applied, markErr := w.repo.MarkSucceeded(ctx, rate, nextTask.ID, *nextTask.LeaseToken)
+	if markErr == nil && applied && w.cache != nil {
+		if err := w.cache.DeleteLatest(ctx, nextTask.CurrencyPair); err != nil {
+			w.logger.Warn("failed to invalidate latest quote cache", "pair", nextTask.CurrencyPair, "error", err)
+		}
+	}
+	return w.finish(nextTask, applied, markErr)
+}
+
 // finish keeps draining the queue after a task was claimed, even if its lease was lost.
 func (w *Worker) finish(task *models.QuoteUpdate, applied bool, err error) (bool, error) {
 	if err != nil {
+		// If the task had already been picked up but `MarkSucceeded` returned `applied=false`
+		// due to a lost lease, `ProcessOnce` should still return `true, nil`.
+		// Otherwise, `processAvailable` would stop, even though there might be other tasks in the queue
 		return true, err
 	}
 	if !applied {
@@ -129,14 +147,20 @@ func (w *Worker) finish(task *models.QuoteUpdate, applied bool, err error) (bool
 }
 
 func (w *Worker) retryDelay(attempt int32) time.Duration {
-	delay := w.cfg.RetryBaseDelay
-	for i := int32(1); i < attempt && delay < w.cfg.RetryMaxDelay; i++ {
-		if delay > w.cfg.RetryMaxDelay/2 {
-			delay = w.cfg.RetryMaxDelay
-			break
-		}
-		delay *= 2
+	if attempt < 1 {
+		attempt = 1
+	}
+	
+	// Calculate the exponential delay based on the attempt number: BaseDelay * 2^(AttemptCount)
+	// Use a bitwise shift (1 << count-1) to raise 2 to the power
+	shift := uint(attempt - 1)
+	if shift >= 63 {
+		return time.Duration(rand.Int63n(int64(w.cfg.RetryMaxDelay)))
+	}
+	backoff := w.cfg.RetryBaseDelay * time.Duration(1<<shift)
+	if backoff <= 0 || backoff > w.cfg.RetryMaxDelay {
+		backoff = w.cfg.RetryMaxDelay
 	}
 
-	return time.Duration(rand.Int63n(int64(delay)))
+	return time.Duration(rand.Int63n(int64(backoff)))
 }

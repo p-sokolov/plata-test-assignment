@@ -15,12 +15,18 @@ type repo interface {
 	GetLatest(ctx context.Context, pair string) (*models.QuoteUpdate, error)
 }
 
-type service struct {
-	repo repo
+type latestCache interface {
+	GetLatest(ctx context.Context, pair string) (*models.LatestQuote, error)
+	SetLatest(ctx context.Context, quote models.LatestQuote) error
 }
 
-func New(repo repo) *service {
-	return &service{repo: repo}
+type service struct {
+	repo  repo
+	cache latestCache
+}
+
+func New(repo repo, cache latestCache) *service {
+	return &service{repo: repo, cache: cache}
 }
 
 func isSupported(pair string) bool {

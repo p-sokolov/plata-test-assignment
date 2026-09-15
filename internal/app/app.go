@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	quotecache "plata-test-assignment/internal/cache/quotes"
 	"plata-test-assignment/internal/client/fx"
 	"plata-test-assignment/internal/errorz"
 	custommiddleware "plata-test-assignment/internal/transport/http/middleware"
@@ -25,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/redis/go-redis/v9"
 
 	repository "plata-test-assignment/internal/repository/quotes"
 	service "plata-test-assignment/internal/service/quotes"
@@ -36,6 +38,7 @@ type App struct {
 	l      *slog.Logger
 	e      *echo.Echo
 	dbPool *pgxpool.Pool
+	redis  *redis.Client
 	w      *worker.Worker
 	wg     sync.WaitGroup
 	cancel context.CancelFunc
@@ -51,6 +54,9 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 	if err := a.initDB(ctx); err != nil {
 		return nil, err
 	}
+	if err := a.initRedis(ctx); err != nil {
+		a.l.Warn("Redis cache disabled", "error", err)
+	}
 
 	if err := a.migrateDB(); err != nil {
 		return nil, err
@@ -60,8 +66,15 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 		return nil, err
 	}
 
-	repo := repository.New(a.dbPool)
-	service := service.New(repo)
+	// declaring variables for project layers
+	repo := repository.New(a.dbPool)	
+	var cache *quotecache.Cache
+	if a.redis == nil {
+		cache = quotecache.New(nil, cfg.Redis.CacheTTL)
+	} else {
+		cache = quotecache.New(a.redis, cfg.Redis.CacheTTL)
+	}	
+	service := service.New(repo, cache)
 	handler := handler.New(service)
 
 	// create foreign exchange instance
@@ -79,8 +92,11 @@ func New(ctx context.Context, cfg *config.Config, l *slog.Logger) (*App, error) 
 		RetryBaseDelay: a.cfg.Worker.BackoffBaseDelay,
 		RetryMaxDelay:  a.cfg.Worker.BackoffMaxDelay,
 	}
-	quoteWorker, err := worker.New(repo, fxClient, workerCfg, a.l)
+	quoteWorker, err := worker.New(repo, fxClient, cache, workerCfg, a.l)
 	if err != nil {
+		if a.redis != nil {
+			a.redis.Close()
+		}
 		a.dbPool.Close()
 		return nil, fmt.Errorf("create quote worker: %w", err)
 	}
@@ -136,6 +152,9 @@ func (a *App) Stop(ctx context.Context) error {
 
 	a.l.Info("Closing database pool...")
 	a.dbPool.Close()
+	if a.redis != nil {
+		a.redis.Close()
+	}
 
 	if stopErr != nil {
 		return stopErr
@@ -173,6 +192,24 @@ func (a *App) initDB(ctx context.Context) error {
 		return fmt.Errorf("failed to init db connection: %w", err)
 	}
 	a.dbPool = dbPool
+	return nil
+}
+
+func (a *App) initRedis(ctx context.Context) error {
+	if a.cfg.Redis.URL == "" {
+		return nil
+	}
+	options, err := redis.ParseURL(a.cfg.Redis.URL)
+	if err != nil {
+		return fmt.Errorf("parse redis URL: %w", err)
+	}
+
+	client := redis.NewClient(options)
+	if err := client.Ping(ctx).Err(); err != nil {
+		client.Close()
+		return fmt.Errorf("connect to redis: %w", err)
+	}
+	a.redis = client
 	return nil
 }
 
