@@ -8,6 +8,8 @@ currency pairs made of USD, EUR, and MXN. A client requests a refresh, receives
 an update identifier immediately, and can later retrieve either the task status
 or the latest successfully stored quote.
 
+Project demo video: https://www.dropbox.com/scl/fi/w1iyojos3wbe4zehrss2n/plata-quote-service-demo.mp4?rlkey=euy5pd2ehqqip0e9ziffeh0ad&st=um5mqtey&dl=0
+
 ## Task scope and expectations
 
 This project represents itself:
